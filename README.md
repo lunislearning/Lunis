@@ -97,75 +97,43 @@ and 90 MB for the app and books.
 
 ## Requirements
 
-- A computer running **Ubuntu or Debian Linux**, or **Windows 10 or 11**.
-- A Wi-Fi card that can act as an access point, if the box should broadcast its own
-  Wi-Fi (most laptops can). Otherwise, any Wi-Fi router works; it needs no internet.
-- Python 3.9 or newer. The installer sets it up.
-- Internet access during installation only, to download packages, the model, the
-  translator and the video lessons.
-
-Student devices need nothing but a web browser. Any phone, tablet, Chromebook, or
-laptop works.
+- **One computer** to be the server: a laptop or PC running **Windows 10 or 11** or
+  **Ubuntu**. 8 GB of memory is comfortable, 4 GB works.
+- **Internet during the install only** (about 2.5 GB to download). After that, none.
+- Students need only a phone, tablet, Chromebook or laptop with a web browser.
 
 ## Install
 
-### Ubuntu / Debian
+Plug the computer in and leave about 30 to 60 minutes for the install. Most of that
+is downloading.
 
-```bash
-sudo apt-get update && sudo apt-get install -y git
-git clone https://github.com/lunislearning/Lunis.git ~/lunis
-cd ~/lunis
-bash server/install.sh
-```
+### Windows
 
-That one command does everything: system packages, llama.cpp, the language model,
-LibreTranslate and its language models, the video lessons, three background services
-that start automatically when the machine boots, and the classroom Wi-Fi hotspot. It is
-safe to run again, since it skips anything already done.
+1. Download **[LunisSetup.exe](https://github.com/lunislearning/Lunis/releases/latest/download/LunisSetup.exe)**.
+2. Double-click it. If Windows says *"Windows protected your PC"*, click
+   **More info**, then **Run anyway**.
+3. Click **Next** through the setup. When Windows asks for permission, click **Yes**.
+4. The last page shows the **Wi-Fi name**, the **password** and the **address**.
+   Write them on the board.
 
-Expect 20 to 60 minutes on a slow machine. Most of that is building llama.cpp and
-downloading the model and videos.
+### Ubuntu
 
-When it finishes it prints the address to open, for example `http://192.0.2.10:8090`,
-and the Wi-Fi name and password for students.
+1. Download **[lunis-installer-ubuntu.run](https://github.com/lunislearning/Lunis/releases/latest/download/lunis-installer-ubuntu.run)**.
+2. Open **Terminal** and type:
 
-Installer options, set in front of the command:
+   ```bash
+   bash ~/Downloads/lunis-installer-ubuntu.run
+   ```
 
-```bash
-LUNIS_HOTSPOT_SSID="Room 4" LUNIS_HOTSPOT_PASSWORD=apples123 bash server/install.sh
-LUNIS_HOTSPOT=0 bash server/install.sh        # no hotspot; students use a router
-```
+3. Type your password when it asks.
+4. At the end it shows the **Wi-Fi name**, the **password** and the **address**.
+   Write them on the board.
 
-Full details, and the by-hand version: [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
+That's all. Lunis starts by itself every time the computer is turned on.
 
-### Windows 10 / 11
-
-1. Get the code: `git clone https://github.com/lunislearning/Lunis.git %USERPROFILE%\lunis`,
-   or download the ZIP from GitHub and unzip it to `C:\Users\<you>\lunis`.
-2. In that folder, open `server\` and double-click **`Install Lunis Server.cmd`**.
-3. Click **Yes** at the one Windows permission prompt. It opens the firewall and keeps
-   the classroom hotspot from switching itself off. No other admin rights are needed.
-
-It installs Python if needed, the llama.cpp engine, the model, LibreTranslate and the
-video lessons, starts everything at sign-in with a Scheduled Task, and turns on the
-Windows Mobile Hotspot. When it finishes a browser opens at `http://127.0.0.1:8090`.
-Check and control the box with **Lunis Server Status** on the Desktop, or:
-
-```powershell
-py server\lunis_service.py status
-py server\lunis_service.py restart all
-```
-
-Full details, including running it as an unattended box:
-[docs/WINDOWS_SERVER.md](docs/WINDOWS_SERVER.md).
-
-### Installer files and offline install
-
-If the [release page](https://github.com/lunislearning/Lunis/releases) has them,
-**`lunis-installer-ubuntu-<version>.run`** (run it with `bash`) and
-**`LunisSetup-<version>.exe`** (a Windows setup wizard) do the same as the commands
-above without Git. A **Lunis-Offline** bundle on an SD card or USB stick lets either
-one set up a box with no internet at all.
+Setting up a classroom with no internet at all, or installing from the source code?
+See [docs/WINDOWS_SERVER.md](docs/WINDOWS_SERVER.md) (Windows) or
+[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md) (Ubuntu).
 
 ### First run
 
@@ -183,24 +151,16 @@ one set up a box with no internet at all.
 
 ### Connecting student devices
 
-Both installers make the box **broadcast its own Wi-Fi**, called **Lunis** unless you
-chose another name, and print what to write on the board:
+The server makes its own Wi-Fi, so no router and no internet are needed.
 
-| | Ubuntu | Windows |
-|---|---|---|
-| Wi-Fi | **Lunis**, starts at every boot | **Lunis** (Mobile Hotspot), kept on by the supervisor |
-| Address students open | `http://lunis.lan` (or `http://10.42.0.1:8090`) | `http://192.168.137.1:8090` |
-| Devices at once | limited by the Wi-Fi card | 8 (Windows' limit) |
-| Turn it off / on | `sudo nmcli connection down\|up Lunis-Hotspot` | `py server\lunis_service.py hotspot off\|on` |
+1. On the student's device, join the Wi-Fi the installer showed (**Lunis** unless you
+   chose another name) with its password.
+2. If the phone warns that the network has no internet, choose **Stay connected**.
+3. Open the browser and go to the address: `http://lunis.lan` on an Ubuntu server,
+   `http://192.168.137.1:8090` on a Windows server.
 
-Students join that Wi-Fi, open the address, and they are in. There is no internet
-involved at any point. Phones may warn that the network has no internet: choose
-"Stay connected" or "Use this network anyway".
-
-The server also listens on port 8090 on every network interface, so with a normal
-Wi-Fi router any device on the same network can reach it at `http://<box-ip>:8090`.
-Use a router for more than 8 students on Windows, or when the Wi-Fi card can't run a
-hotspot.
+A Windows server takes up to 8 devices at once. For more, or if the computer has no
+Wi-Fi, use any Wi-Fi router (it needs no internet) and open `http://<server-ip>:8090`.
 
 ## Usage
 

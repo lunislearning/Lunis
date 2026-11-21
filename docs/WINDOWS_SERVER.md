@@ -12,8 +12,7 @@ Everything runs **offline** once installed. Internet is needed only during the i
 
 ## The easiest way: LunisSetup.exe
 
-If the [release page](https://github.com/lunislearning/Lunis/releases) has
-**`LunisSetup-<version>.exe`**, download it and run it. A
+Download **[LunisSetup.exe](https://github.com/lunislearning/Lunis/releases/latest/download/LunisSetup.exe)** and run it. A
 normal setup wizard asks for the classroom Wi-Fi name and password, copies Lunis to
 `C:\Users\<you>\Lunis` and sets everything up, including one Windows permission prompt
 (click **Yes**). The last page shows what to write on the board. It also adds
@@ -24,7 +23,7 @@ data in `Lunis\data`.
 The installer isn't code-signed yet. If Windows shows *"Windows protected your PC"*,
 click **More info → Run anyway**.
 
-Silent install: `LunisSetup-<version>.exe /VERYSILENT /TASKS="hotspot"`.
+Silent install: `LunisSetup.exe /VERYSILENT /TASKS="hotspot"`.
 
 ### No internet at all: the offline bundle (SD card / USB)
 

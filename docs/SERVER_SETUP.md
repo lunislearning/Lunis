@@ -21,14 +21,14 @@ to new hardware, or you need to understand/repair the running one.
 
 ## The easiest way: one installer file
 
-If the [release page](https://github.com/lunislearning/Lunis/releases) has
-**`lunis-installer-ubuntu-<version>.run`**, download it and run it as your normal user.
+Download **[lunis-installer-ubuntu.run](https://github.com/lunislearning/Lunis/releases/latest/download/lunis-installer-ubuntu.run)** and run it as your
+normal user.
 It asks for sudo when it needs it:
 
 ```bash
-bash lunis-installer-ubuntu-*.run          # unpacks to ~/lunis, then runs server/install.sh
-bash lunis-installer-ubuntu-*.run --hotspot-name "Room 4" --hotspot-password apples123
-bash lunis-installer-ubuntu-*.run --help   # --dir, --no-hotspot, --hotspot-iface, --extract-only
+bash lunis-installer-ubuntu.run          # unpacks to ~/lunis, then runs server/install.sh
+bash lunis-installer-ubuntu.run --hotspot-name "Room 4" --hotspot-password apples123
+bash lunis-installer-ubuntu.run --help   # --dir, --no-hotspot, --hotspot-iface, --extract-only
 ```
 
 Re-running a newer one upgrades in place and keeps the student data in `~/lunis/data`.
