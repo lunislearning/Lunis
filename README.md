@@ -4,10 +4,10 @@
 
 Lunis is an offline learning server for schools with no reliable internet.
 
-You install it on one Linux computer. That computer runs a web app, an AI tutor, and
-a translator, all locally. Students connect to it over Wi-Fi from tablets, phones, or
-laptops and open it in a browser. Nothing is installed on the student devices, and
-nothing needs an internet connection once the server is set up.
+You install it on one Linux or Windows computer. That computer runs a web app, an AI
+tutor, and a translator, all locally, and broadcasts its own Wi-Fi. Students connect
+to it from tablets, phones, or laptops and open it in a browser. Nothing is installed
+on the student devices, and nothing needs an internet connection once the server is set up.
 
 ## Non-commercial use
 
@@ -97,32 +97,75 @@ and 90 MB for the app and books.
 
 ## Requirements
 
-- A computer running Ubuntu or Debian Linux. This is the only supported platform for
-  the server.
-- Python 3.9 or newer, which the installer sets up.
-- Internet access during installation only, to download packages, the model, and the
-  video lessons.
+- A computer running **Ubuntu or Debian Linux**, or **Windows 10 or 11**.
+- A Wi-Fi card that can act as an access point, if the box should broadcast its own
+  Wi-Fi (most laptops can). Otherwise, any Wi-Fi router works; it needs no internet.
+- Python 3.9 or newer. The installer sets it up.
+- Internet access during installation only, to download packages, the model, the
+  translator and the video lessons.
 
 Student devices need nothing but a web browser. Any phone, tablet, Chromebook, or
 laptop works.
 
 ## Install
 
+### Ubuntu / Debian
+
 ```bash
+sudo apt-get update && sudo apt-get install -y git
 git clone https://github.com/lunislearning/Lunis.git ~/lunis
 cd ~/lunis
 bash server/install.sh
 ```
 
 That one command does everything: system packages, llama.cpp, the language model,
-LibreTranslate, the video lessons, and three background services that start
-automatically when the machine boots. It is safe to run again, since it skips
-anything already done.
+LibreTranslate and its language models, the video lessons, three background services
+that start automatically when the machine boots, and the classroom Wi-Fi hotspot. It is
+safe to run again, since it skips anything already done.
 
 Expect 20 to 60 minutes on a slow machine. Most of that is building llama.cpp and
 downloading the model and videos.
 
-When it finishes it prints the address to open, for example `http://192.0.2.10:8090`.
+When it finishes it prints the address to open, for example `http://192.0.2.10:8090`,
+and the Wi-Fi name and password for students.
+
+Installer options, set in front of the command:
+
+```bash
+LUNIS_HOTSPOT_SSID="Room 4" LUNIS_HOTSPOT_PASSWORD=apples123 bash server/install.sh
+LUNIS_HOTSPOT=0 bash server/install.sh        # no hotspot; students use a router
+```
+
+Full details, and the by-hand version: [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
+
+### Windows 10 / 11
+
+1. Get the code: `git clone https://github.com/lunislearning/Lunis.git %USERPROFILE%\lunis`,
+   or download the ZIP from GitHub and unzip it to `C:\Users\<you>\lunis`.
+2. In that folder, open `server\` and double-click **`Install Lunis Server.cmd`**.
+3. Click **Yes** at the one Windows permission prompt. It opens the firewall and keeps
+   the classroom hotspot from switching itself off. No other admin rights are needed.
+
+It installs Python if needed, the llama.cpp engine, the model, LibreTranslate and the
+video lessons, starts everything at sign-in with a Scheduled Task, and turns on the
+Windows Mobile Hotspot. When it finishes a browser opens at `http://127.0.0.1:8090`.
+Check and control the box with **Lunis Server Status** on the Desktop, or:
+
+```powershell
+py server\lunis_service.py status
+py server\lunis_service.py restart all
+```
+
+Full details, including running it as an unattended box:
+[docs/WINDOWS_SERVER.md](docs/WINDOWS_SERVER.md).
+
+### Installer files and offline install
+
+If the [release page](https://github.com/lunislearning/Lunis/releases) has them,
+**`lunis-installer-ubuntu-<version>.run`** (run it with `bash`) and
+**`LunisSetup-<version>.exe`** (a Windows setup wizard) do the same as the commands
+above without Git. A **Lunis-Offline** bundle on an SD card or USB stick lets either
+one set up a box with no internet at all.
 
 ### First run
 
@@ -140,17 +183,24 @@ When it finishes it prints the address to open, for example `http://192.0.2.10:8
 
 ### Connecting student devices
 
-The server listens on port 8090 on every network interface, so any device on the same
-network can reach it.
+Both installers make the box **broadcast its own Wi-Fi**, called **Lunis** unless you
+chose another name, and print what to write on the board:
 
-If there is no network in the building, the server can be the access point:
-
-```bash
-nmcli device wifi hotspot ssid lunis password choose-something
-```
+| | Ubuntu | Windows |
+|---|---|---|
+| Wi-Fi | **Lunis**, starts at every boot | **Lunis** (Mobile Hotspot), kept on by the supervisor |
+| Address students open | `http://lunis.lan` (or `http://10.42.0.1:8090`) | `http://192.168.137.1:8090` |
+| Devices at once | limited by the Wi-Fi card | 8 (Windows' limit) |
+| Turn it off / on | `sudo nmcli connection down\|up Lunis-Hotspot` | `py server\lunis_service.py hotspot off\|on` |
 
 Students join that Wi-Fi, open the address, and they are in. There is no internet
-involved at any point.
+involved at any point. Phones may warn that the network has no internet: choose
+"Stay connected" or "Use this network anyway".
+
+The server also listens on port 8090 on every network interface, so with a normal
+Wi-Fi router any device on the same network can reach it at `http://<box-ip>:8090`.
+Use a router for more than 8 students on Windows, or when the Wi-Fi card can't run a
+hotspot.
 
 ## Usage
 
@@ -319,6 +369,18 @@ confirm the address, and check that a firewall is not blocking port 8090. Some
 networks stop devices from talking to each other, which blocks this entirely; running
 the server as its own hotspot avoids that.
 
+**Students can't see the Lunis Wi-Fi.**
+On Ubuntu, run `nmcli connection show --active` and look for `Lunis-Hotspot`. On
+Ubuntu Server the Wi-Fi card must be managed by NetworkManager; see
+[docs/SERVER_SETUP.md](docs/SERVER_SETUP.md#8-let-students-connect-wifi-hotspot).
+On Windows, `py server\lunis_service.py hotspot` shows the state and any error. Some
+Wi-Fi cards can't run a hotspot at all; use a router.
+
+**One phone's Chrome can't open the page, but another browser can.**
+Android may keep Chrome off the local network. Allow **Nearby devices** (or "Local
+network") in Chrome's app permissions, then close Chrome fully and reopen it. Right
+after switching Wi-Fi, Chrome can also keep using the old network for a minute.
+
 **The tutor says it is busy.**
 The server answers two questions at a time and queues the rest. Under heavy use a
 question can wait longer than the timeout. More memory and more cores help, and so
@@ -361,6 +423,10 @@ systemctl --user status lunis lunis-llama lunis-translate
 journalctl --user -u lunis -n 50
 ```
 
+On Windows: `py server\lunis_service.py status`, and the logs in
+`%LOCALAPPDATA%\Lunis\logs\`. More in
+[docs/WINDOWS_SERVER.md](docs/WINDOWS_SERVER.md#troubleshooting).
+
 ## FAQ
 
 **Does it need the internet?**
@@ -399,7 +465,8 @@ the shape of an existing book.
   <https://github.com/lunislearning/Lunis/issues>. Include what you did,
   what happened, and the output of
   `journalctl --user -u lunis -n 50` if the server is involved.
-- **Setting up a server in detail:** see [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md).
+- **Setting up a server in detail:** see [docs/SERVER_SETUP.md](docs/SERVER_SETUP.md)
+  (Ubuntu) or [docs/WINDOWS_SERVER.md](docs/WINDOWS_SERVER.md) (Windows).
 - **How the pieces fit together:** see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Changing the code:** see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 

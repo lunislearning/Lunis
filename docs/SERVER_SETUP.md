@@ -6,14 +6,39 @@ local AI model, the translation engine, and the auto‑start service. It targets
 Linux** (the reference box is a laptop running Ubuntu with 4 CPU cores, ~7 GB RAM, **no
 GPU**), but any Linux with Python 3.9+ works. Everything runs **offline** once set up.
 
+> **Windows box?** Use [WINDOWS_SERVER.md](WINDOWS_SERVER.md). It has the same three
+> pieces, a one-click installer, and a small supervisor (`server/lunis_service.py`) in
+> place of systemd.
+
 If you only want to *edit the code*, you don't need this — see
-[WINDOWS_SETUP.md](WINDOWS_SETUP.md). Come here when you're building a new box, moving
+[CONTRIBUTING.md](CONTRIBUTING.md). Come here when you're building a new box, moving
 to new hardware, or you need to understand/repair the running one.
 
 > **Run your own server.** This sets up a **complete, independent** Lunis box that you
 > own — it does not connect to or depend on anyone else's server.
 
 ---
+
+## The easiest way: one installer file
+
+If the [release page](https://github.com/lunislearning/Lunis/releases) has
+**`lunis-installer-ubuntu-<version>.run`**, download it and run it as your normal user.
+It asks for sudo when it needs it:
+
+```bash
+bash lunis-installer-ubuntu-*.run          # unpacks to ~/lunis, then runs server/install.sh
+bash lunis-installer-ubuntu-*.run --hotspot-name "Room 4" --hotspot-password apples123
+bash lunis-installer-ubuntu-*.run --help   # --dir, --no-hotspot, --hotspot-iface, --extract-only
+```
+
+Re-running a newer one upgrades in place and keeps the student data in `~/lunis/data`.
+
+**No internet at all?** If the release offers the **Lunis-Offline** bundle, copy it to an
+SD card or USB stick and run `bash lunis-installer-ubuntu-*.run` from that folder. It
+finds the `offline/` folder next to itself (the AI model, a prebuilt llama.cpp, a
+standalone Python 3.12, the translator packages and the language data), skips `apt`
+entirely and installs everything from the card. `server/install.sh` does the same when
+you set `LUNIS_OFFLINE_DIR=/path/to/offline`.
 
 ## The easy way — one command
 
@@ -28,13 +53,17 @@ bash server/install.sh
 
 `server/install.sh` does the entire setup below for you:
 
-- installs Python, Git, build tools, **llama.cpp**, and **LibreTranslate**;
+- installs Python, Git, build tools, **llama.cpp**, and **LibreTranslate** with its
+  English/French/Spanish/German language models;
 - downloads the **Qwen2.5‑3B** model (~1.9 GB, one time);
+- downloads the lesson videos (~570 MB) with `scripts/fetch_content.py`;
 - builds the lesson transcripts;
 - creates three auto‑restart services — **`lunis`** (the app, port 8090),
   **`lunis-llama`** (the AI, 8080), **`lunis-translate`** (translation, 5000) —
   and enables them to start on boot;
-- health‑checks the app and prints the URL to open.
+- makes the box broadcast its own Wi‑Fi, **`Lunis`**, at every boot (see
+  [section 8](#8-let-students-connect-wifi-hotspot));
+- health‑checks the app and prints the URL to open, plus the Wi‑Fi name and password.
 
 It's safe to re‑run (it skips whatever's already done). When it finishes, open
 `http://<your-box-ip>:8090`, complete the one‑time teacher‑password wizard, and you're
@@ -303,16 +332,33 @@ name. Per‑student quiz results land in `data/progress/<name>.json`.
 
 ## 8. Let students connect (Wi‑Fi hotspot)
 
-For a room with no internet, the box broadcasts its own Wi‑Fi:
+For a room with no internet, the box broadcasts its own Wi‑Fi. `server/install.sh` sets
+this up as a persistent NetworkManager access point called **`Lunis`** (connection name
+`Lunis-Hotspot`). It comes up at every boot, before anyone logs in, and the installer
+prints the password at the end:
 
-- Turn on the hotspot (the reference box uses a small script, `~/hotspot-on.sh`, that
-  brings up an access point named **`lunis`**). On modern Ubuntu you can also create
-  a hotspot from *Settings → Wi‑Fi → ⋮ → Turn On Wi‑Fi Hotspot*, or with
-  `nmcli device wifi hotspot ssid lunis password <pass>`.
-- Students join the **`lunis`** network, then open **`http://<box-ip>:8090`**.
-- The box's IP depends on the network: on its own hotspot it is the box's hotspot
-  address; on an existing Wi‑Fi it is whatever the router gave it. Find it with
-  `ip addr` or `hostname -I`.
+```
+STUDENTS:  join Wi-Fi  Lunis
+           password    lunis4821
+           then open   http://lunis.lan   (or http://10.42.0.1:8090)
+```
+
+- The box is always **`10.42.0.1`** on its own network. NetworkManager's *shared* mode
+  hands out addresses and DNS to the students' devices.
+- **`http://lunis.lan`** also works: the installer adds a DNS name for the box and
+  redirects port 80 to the app, so students don't need the IP or `:8090`.
+- It uses 2.4 GHz WPA2, which even old, cheap phones and tablets can join.
+- A single Wi‑Fi card can't be the hotspot and join another Wi‑Fi at the same time. The
+  hotspot wins at boot. To get on home Wi‑Fi for updates, run
+  `sudo nmcli connection down Lunis-Hotspot`; it comes back at the next boot.
+- Choose the name and password up front with
+  `LUNIS_HOTSPOT_SSID="Room 4" LUNIS_HOTSPOT_PASSWORD=apples123 bash server/install.sh`.
+  Skip the hotspot with `LUNIS_HOTSPOT=0`. Pick the Wi‑Fi card (for example a USB
+  adapter) with `LUNIS_HOTSPOT_IFACE=wlx...`.
+- **Ubuntu Server:** the Wi‑Fi card has to be managed by NetworkManager. Set
+  `renderer: NetworkManager` in `/etc/netplan/*.yaml` and run `sudo netplan apply`.
+  The installer warns if it isn't.
+- Manual equivalent: `nmcli device wifi hotspot ssid Lunis password <pass>`.
 
 Nothing is installed on student devices — they only stream from the box.
 

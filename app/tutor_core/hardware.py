@@ -19,6 +19,7 @@ import json
 import os
 import platform
 import re
+import subprocess
 import time
 import urllib.request
 
@@ -93,6 +94,40 @@ def _read(path):
         return ""
 
 
+def _sysctl(name):
+    """macOS: read one sysctl value as a string ('' if unavailable)."""
+    if platform.system() != "Darwin":
+        return ""
+    try:
+        return subprocess.run(["sysctl", "-n", name], capture_output=True, text=True,
+                              timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _windows_physical_cores():
+    """Count RelationProcessorCore records from GetLogicalProcessorInformation.
+    (wmic, the old way, is gone from current Windows 11 builds.)"""
+    k32 = ctypes.windll.kernel32
+    length = ctypes.c_ulong(0)
+    k32.GetLogicalProcessorInformation(None, ctypes.byref(length))
+    if not length.value:
+        return 0
+    buf = ctypes.create_string_buffer(length.value)
+    if not k32.GetLogicalProcessorInformation(buf, ctypes.byref(length)):
+        return 0
+    # SYSTEM_LOGICAL_PROCESSOR_INFORMATION: ULONG_PTR mask, DWORD relationship, 16-byte union
+    rec = ctypes.sizeof(ctypes.c_size_t) + 4
+    rec += (-rec) % 8 + 16
+    count = 0
+    for off in range(0, length.value - rec + 1, rec):
+        rel = int.from_bytes(buf.raw[off + ctypes.sizeof(ctypes.c_size_t):
+                                     off + ctypes.sizeof(ctypes.c_size_t) + 4], "little")
+        if rel == 0:          # RelationProcessorCore
+            count += 1
+    return count
+
+
 def physical_cores():
     """Physical cores, not hyperthreads. Two hyperthreads on one 2012 core do not make
     a machine able to serve two students."""
@@ -117,13 +152,14 @@ def physical_cores():
             return int(n[0])
     if platform.system() == "Windows":
         try:
-            with os.popen("wmic cpu get NumberOfCores") as p:
-                out = p.read()
-            nums = [int(x) for x in re.findall(r"\d+", out)]
-            if nums:
-                return sum(nums)
-        except OSError:
+            n = _windows_physical_cores()
+            if n:
+                return n
+        except (AttributeError, OSError, ValueError):
             pass
+    n = _sysctl("hw.physicalcpu")
+    if n.isdigit() and int(n) > 0:
+        return int(n)
     # No physical-core information available: halve the logical count rather than
     # trusting it, so an unknown machine lands in a lower tier instead of a higher one.
     logical = os.cpu_count() or 1
@@ -149,6 +185,9 @@ def ram_gb():
         st.dwLength = ctypes.sizeof(_MemStatus)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
             return st.ullTotalPhys / float(1024 ** 3)
+    n = _sysctl("hw.memsize")
+    if n.isdigit():
+        return int(n) / float(1024 ** 3)
     try:
         return (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) / float(1024 ** 3)
     except (ValueError, OSError, AttributeError):
@@ -165,6 +204,13 @@ def has_avx2():
             return bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(40))
         except (AttributeError, OSError):
             return False
+    if platform.system() == "Darwin":
+        if platform.machine() == "arm64":
+            # Apple Silicon has no AVX2 but its NEON/Metal path is far faster than the
+            # AVX2-class x86 this flag stands for, so it must not drop the box to Tier 1.
+            return True
+        feats = (_sysctl("machdep.cpu.leaf7_features") + " " + _sysctl("machdep.cpu.features"))
+        return "AVX2" in feats.upper().split()
     return False
 
 

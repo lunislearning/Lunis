@@ -8,7 +8,7 @@ Built to serve many devices at once on a weak CPU box:
    queues instead of overwhelming the box.
 Pure standard library. Talks to llama.cpp (:8080) and LibreTranslate (:5000).
 """
-import json, os, re, threading, time, queue, datetime, hashlib, random, secrets, subprocess, urllib.request
+import json, os, re, shutil, threading, time, queue, datetime, hashlib, random, secrets, subprocess, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -22,7 +22,17 @@ DATA = os.path.join(BASE, "data")
 PROGRESS = os.path.join(DATA, "progress")
 SUBS = os.path.join(DATA, "subs")
 THUMBS = os.path.join(DATA, "thumbs")
-FFMPEG = os.path.join(BASE, "tools", "ffmpeg")
+def _find_ffmpeg():
+    """A bundled tools/ffmpeg(.exe) wins; otherwise whatever ffmpeg is on PATH.
+    None when there is none - thumbnails are then simply skipped."""
+    for name in (("ffmpeg.exe", "ffmpeg") if os.name == "nt" else ("ffmpeg",)):
+        cand = os.path.join(BASE, "tools", name)
+        if os.path.isfile(cand):
+            return cand
+    return shutil.which("ffmpeg")
+FFMPEG = _find_ffmpeg()
+# Windows: keep child processes (ffmpeg) from flashing a console window.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STATIC = os.path.join(ROOT, "static")
 
 # ---- configuration ----
@@ -94,6 +104,31 @@ def _thumb_lock(vid):
             _thumb_locks[vid] = l
         return l
 
+def _replace(src, dst):
+    """os.replace, but patient on Windows: there, replacing a file that another
+    thread has open for reading fails with PermissionError for a moment."""
+    for attempt in range(40):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 39:
+                raise
+            time.sleep(0.05)
+
+def _safe_join(base, rel):
+    """Join a URL-supplied relative path under `base`, or return None if it would
+    escape it. Stripping ".." is not enough on Windows, where a component such as
+    "C:" or a backslash makes os.path.join jump to another place entirely."""
+    parts = [x for x in rel.replace("\\", "/").split("/") if x and x not in (".", "..")]
+    if not parts or any(":" in x for x in parts):
+        return None
+    root = os.path.realpath(base)
+    fp = os.path.realpath(os.path.join(root, *parts))
+    if fp != root and not fp.startswith(root + os.sep):
+        return None
+    return fp
+
 def make_thumb(vid):
     """Lazily extract one representative frame from a lesson video as its thumbnail,
     cropped/scaled identically for every video so the grid stays visually consistent
@@ -102,7 +137,7 @@ def make_thumb(vid):
     if os.path.exists(out):
         return out
     src = os.path.join(CONTENT, vid + ".mp4")
-    if not os.path.exists(src) or not os.path.exists(FFMPEG):
+    if not os.path.exists(src) or not FFMPEG:
         return None
     with _thumb_lock(vid):
         if os.path.exists(out):
@@ -111,9 +146,10 @@ def make_thumb(vid):
         try:
             subprocess.run([FFMPEG, "-y", "-ss", "5", "-i", src, "-frames:v", "1",
                              "-vf", "scale=320:200:force_original_aspect_ratio=increase,crop=320:200",
-                             "-f", "mjpeg", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+                             "-f", "mjpeg", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            timeout=20, creationflags=_NO_WINDOW)
             if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
-                os.replace(tmp, out)
+                _replace(tmp, out)
                 return out
         except Exception:
             pass
@@ -613,10 +649,10 @@ def build_quizzes(lang):
     return out
 
 def _write(path, obj):
-    tmp = path + ".tmp"
+    tmp = "%s.%d.tmp" % (path, threading.get_ident())   # per-thread: concurrent writers never share a temp file
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False)
-    os.replace(tmp, path)   # atomic; readers never see a half-written file
+    _replace(tmp, path)   # atomic; readers never see a half-written file
 
 # ONE background worker builds caches sequentially, so it can never overload
 # LibreTranslate (concurrent builds caused timeouts -> English got cached).
@@ -2510,9 +2546,8 @@ class H(BaseHTTPRequestHandler):
                                     "grade": b.get("grade"), "textbook": (not imgs),
                                     "spreads": spreads, "credits": credits})
         if path.startswith("/api/bookimg/"):
-            rel = path[len("/api/bookimg/"):].replace("..", "")
-            fp = os.path.join(BOOKS, *[x for x in rel.split("/") if x])
-            if not os.path.exists(fp):
+            fp = _safe_join(BOOKS, path[len("/api/bookimg/"):])
+            if not fp or not os.path.isfile(fp):
                 return self._send(404, "no", "text/plain")
             with open(fp, "rb") as f:
                 return self._send(200, f.read(), "image/jpeg", cache=True)
@@ -2649,9 +2684,8 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
     def _static(self, rel, cache=False):
-        rel = rel.replace("..", "")
-        fp = os.path.join(STATIC, rel)
-        if not os.path.exists(fp):
+        fp = _safe_join(STATIC, rel)
+        if not fp or not os.path.isfile(fp):
             return self._send(404, "not found", "text/plain")
         ctype = {"html": "text/html", "js": "application/javascript", "css": "text/css",
                  "png": "image/png", "svg": "image/svg+xml", "woff2": "font/woff2"}.get(
